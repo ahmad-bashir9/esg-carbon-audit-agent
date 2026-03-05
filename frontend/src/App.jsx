@@ -4,8 +4,6 @@ import Dashboard from './pages/Dashboard';
 import Auditor from './pages/Auditor';
 import Reports from './pages/Reports';
 import DataManager from './pages/DataManager';
-import Login from './pages/Login';
-import Profile from './pages/Profile';
 import Simulator from './pages/Simulator';
 import { useLocation } from 'react-router-dom';
 
@@ -17,18 +15,6 @@ export default function App() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [status, setStatus] = useState(null);
-
-    // Auth State
-    const [user, setUser] = useState(() => {
-        const saved = localStorage.getItem('carbonlens_user');
-        return saved ? JSON.parse(saved) : null;
-    });
-
-    const handleLogout = () => {
-        localStorage.removeItem('carbonlens_token');
-        localStorage.removeItem('carbonlens_user');
-        setUser(null);
-    };
 
     // Theme State defaults to dark
     const [theme, setTheme] = useState(() => {
@@ -109,10 +95,6 @@ export default function App() {
 
     const unresolvedCount = alerts.filter(a => !a.acknowledged).length;
 
-    if (!user) {
-        return <Login onLogin={setUser} />;
-    }
-
     return (
         <BrowserRouter>
             <div className="app-layout">
@@ -154,11 +136,6 @@ export default function App() {
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" /></svg>
                             Reports
                         </NavLink>
-
-                        <NavLink to="/profile" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="7" r="4" /><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /></svg>
-                            Profile Settings
-                        </NavLink>
                     </nav>
 
                     <div className="sidebar-footer">
@@ -173,13 +150,6 @@ export default function App() {
                                 style={{ flex: 1, justifyContent: 'center', fontSize: '0.8rem', padding: '8px' }}
                             >
                                 {theme === 'dark' ? '☀️' : '🌙'}
-                            </button>
-                            <button
-                                className="btn btn-danger"
-                                onClick={handleLogout}
-                                style={{ flex: 2, justifyContent: 'center', fontSize: '0.8rem', padding: '8px' }}
-                            >
-                                Sign Out
                             </button>
                         </div>
                     </div>
@@ -203,7 +173,6 @@ export default function App() {
                             />
                         } />
                         <Route path="/reports" element={<Reports />} />
-                        <Route path="/profile" element={<Profile />} />
                     </Routes>
                 </main>
             </div>

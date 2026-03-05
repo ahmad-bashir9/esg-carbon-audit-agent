@@ -426,42 +426,6 @@ class DB {
     return { totalRecords, byScope, byCategory, bySource, dateRange };
   }
 
-  // ─── Authentication & Users ──────────────────────────────────────
-  async getUserByEmail(email) {
-    return this.db.get('SELECT * FROM users WHERE email = ?', [email]);
-  }
-
-  async createUser(user) {
-    return this.db.run(`
-      INSERT INTO users (id, name, email, password_hash)
-      VALUES ($id, $name, $email, $password_hash)
-    `, {
-      $id: user.id,
-      $name: user.name,
-      $email: user.email,
-      $password_hash: user.password_hash
-    });
-  }
-
-  // ─── Company Profile ─────────────────────────────────────────────
-  async getCompanyProfile() {
-    return this.db.get('SELECT * FROM company_profile WHERE id = 1');
-  }
-
-  async updateCompanyProfile(data) {
-    const fields = [];
-    const params = {};
-    for (const [key, value] of Object.entries(data)) {
-      if (['name', 'industry', 'employee_count', 'headquarters', 'reporting_framework'].includes(key)) {
-        fields.push(`${key} = $${key}`);
-        params['$' + key] = value;
-      }
-    }
-    if (fields.length === 0) return null;
-    fields.push("updated_at = datetime('now')");
-    return this.db.run(`UPDATE company_profile SET ${fields.join(', ')} WHERE id = 1`, params);
-  }
-
   async close() {
     if (this.db) await this.db.close();
   }
