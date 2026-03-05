@@ -8,6 +8,7 @@ import { emissionEngine } from '../services/emissionEngine.js';
 import { auditorAgent } from '../agents/auditorAgent.js';
 import { reportGenerator } from '../services/reportGenerator.js';
 import { geminiService } from '../services/geminiService.js';
+import { VERTICALS } from '../config/verticals.js';
 
 const router = express.Router();
 const upload = multer({ dest: 'uploads/' });
@@ -19,20 +20,30 @@ const upload = multer({ dest: 'uploads/' });
 router.get('/dashboard', async (req, res) => {
     try {
         const { startDate, endDate, department, facility } = req.query;
-
         const filters = {};
         if (startDate) filters.startDate = startDate;
         if (endDate) filters.endDate = endDate;
         if (department) filters.department = department;
         if (facility) filters.facility = facility;
 
+        // 1. Get Active Vertical & Factors
+        const activeVerticalId = await db.getSetting('active_vertical') || 'default';
+        const factors = await db.getEmissionFactors(activeVerticalId);
+        const factorMap = factors.reduce((acc, f) => {
+            acc[f.activity_type] = f;
+            return acc;
+        }, {});
+
+        // 2. Fetch Activities
         const activities = await db.getActivities(filters);
 
-        const activityData = _dbToEngineFormat(activities);
-        const emissions = emissionEngine.calculateAll(activityData);
+        // 3. Calculate Emissions using Engine
+        const emissions = emissionEngine.calculateWithFactors({ activities }, factorMap);
 
+        // 4. Run Auditor Agent
         const newAlerts = await auditorAgent.analyze(emissions);
 
+        // 5. Cache results in emissions table for persistence
         await _storeEmissions(emissions);
 
         res.json({
@@ -285,6 +296,20 @@ router.put('/settings', async (req, res) => {
     }
 });
 
+router.get('/verticals/config', (req, res) => {
+    res.json({ success: true, data: VERTICALS });
+});
+
+router.get('/verticals/active', async (req, res) => {
+    try {
+        const activeId = await db.getSetting('active_vertical') || 'default';
+        const config = VERTICALS[activeId] || VERTICALS.default;
+        res.json({ success: true, data: config });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // REPORTS
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -300,10 +325,14 @@ router.get('/report', async (req, res) => {
         const period = req.query.period || new Date().toISOString().slice(0, 7);
         const framework = req.query.framework || 'CSRD & SEC';
 
+        const activeId = await db.getSetting('active_vertical') || 'default';
+        const activeVertical = VERTICALS[activeId] || VERTICALS.default;
+
         const pdfBuffer = await reportGenerator.generateReport(emissions, {
             companyName: company,
             reportingPeriod: period,
             framework,
+            vertical: activeVertical
         });
 
         await db.insertReport({
@@ -592,14 +621,14 @@ async function _storeEmissions(emissions) {
         await db.clearEmissions();
         for (const entry of [...emissions.scope1, ...emissions.scope2, ...emissions.scope3]) {
             await db.insertEmission({
-                activity_id: null,
+                activity_id: entry.id,
                 scope: entry.scope,
                 category: entry.category,
                 source_description: entry.source,
                 activity_data: entry.activity_data,
                 activity_unit: entry.activity_unit,
                 emission_factor: entry.emission_factor,
-                emission_factor_source: 'GHG Protocol',
+                emission_factor_source: entry.emission_factor_source || 'Default',
                 co2e_kg: entry.co2e_kg,
                 calculation_method: 'deterministic',
                 date: entry.date,

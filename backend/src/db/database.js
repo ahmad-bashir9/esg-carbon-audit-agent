@@ -131,6 +131,7 @@ class DB {
         ('auditor_scope2_threshold', '0.10'),
         ('auditor_scope3_threshold', '0.10'),
         ('company_name', 'Acme Corporation'),
+        ('active_vertical', 'default'),
         ('default_grid_region', 'US Average');
 
       -- ── Indexes ────────────────────────────────────────────────
@@ -163,6 +164,28 @@ class DB {
       );
       
       INSERT OR IGNORE INTO company_profile (id, name) VALUES (1, 'Acme Corporation');
+
+      -- ── Emission Factor Library (roadmap) ───────────────────────
+      CREATE TABLE IF NOT EXISTS emission_factors (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        vertical TEXT NOT NULL,
+        activity_type TEXT NOT NULL,
+        unit TEXT NOT NULL,
+        kg_co2e_per_unit REAL NOT NULL,
+        source TEXT,
+        year INTEGER,
+        scope INTEGER NOT NULL
+      );
+
+      -- Seed Logistics Factors
+      INSERT OR IGNORE INTO emission_factors (vertical, activity_type, unit, kg_co2e_per_unit, source, year, scope) VALUES 
+        ('logistics', 'road_freight_articulated', 'tonne-km', 0.0962, 'DEFRA', 2024, 1),
+        ('logistics', 'road_freight_rigid', 'tonne-km', 0.12, 'DEFRA', 2024, 1),
+        ('logistics', 'rail_freight', 'tonne-km', 0.0280, 'DEFRA', 2024, 1),
+        ('logistics', 'air_freight', 'tonne-km', 1.044, 'DEFRA', 2024, 3),
+        ('logistics', 'sea_freight', 'tonne-km', 0.0116, 'DEFRA', 2024, 3),
+        ('logistics', 'refrigerant_r134a', 'kg', 1430, 'EPA', 2024, 1),
+        ('logistics', 'refrigerant_r404a', 'kg', 3922, 'EPA', 2024, 1);
     `);
   }
 
@@ -401,6 +424,10 @@ class DB {
   async getSetting(key) {
     const row = await this.db.get('SELECT value FROM settings WHERE key = ?', [key]);
     return row ? row.value : null;
+  }
+
+  async getEmissionFactors(vertical) {
+    return await this.db.all('SELECT * FROM emission_factors WHERE vertical = ?', [vertical]);
   }
 
   async setSetting(key, value) {

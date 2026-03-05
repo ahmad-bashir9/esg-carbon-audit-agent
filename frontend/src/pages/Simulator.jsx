@@ -4,7 +4,7 @@ import {
     AreaChart, Area
 } from 'recharts';
 
-export default function Simulator({ dashboardData }) {
+export default function Simulator({ dashboardData, vertical, t }) {
     const [scenarios, setScenarios] = useState([
         { id: 1, name: 'Current Baseline', scope1: 0, scope2: 0, scope3: 0, active: true }
     ]);
@@ -82,12 +82,12 @@ export default function Simulator({ dashboardData }) {
 
                         <div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                                <label className="form-label">Fleet Electrification (EV)</label>
+                                <label className="form-label">{t('simulator.ev_label', 'Fleet Electrification (EV)')}</label>
                                 <span style={{ fontWeight: 600, color: 'var(--accent-orange)' }}>{params.evTransition}%</span>
                             </div>
                             <input type="range" className="form-range" min="0" max="100" value={params.evTransition}
                                 onChange={e => setParams({ ...params, evTransition: parseInt(e.target.value) })} />
-                            <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Transitions Scope 1 combustion vehicles to Zero-Emission</p>
+                            <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{t('simulator.ev_hint', 'Transitions Scope 1 combustion vehicles to Zero-Emission')}</p>
                         </div>
 
                         <div>

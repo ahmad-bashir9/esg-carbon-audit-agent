@@ -31,7 +31,7 @@ function CustomTooltip({ active, payload, label }) {
     );
 }
 
-export default function Dashboard({ data, loading, error, onRefresh }) {
+export default function Dashboard({ data, loading, error, onRefresh, vertical, t }) {
     const [insights, setInsights] = useState([]);
     const [filterOptions, setFilterOptions] = useState({ departments: [], facilities: [] });
     const [selectedDept, setSelectedDept] = useState('');
@@ -217,11 +217,11 @@ export default function Dashboard({ data, loading, error, onRefresh }) {
 
                 <div className="card stat-card scope-1 animate-in">
                     <div className="card-header">
-                        <span className="card-title">Scope 1</span>
+                        <span className="card-title">{t('dashboard.scope1_label', 'Scope 1')}</span>
                         <div className="card-icon" style={{ background: 'rgba(249, 115, 22, 0.15)' }}>🔥</div>
                     </div>
                     <div className="card-value" style={{ color: SCOPE_COLORS.scope1 }}>{formatNum(totals.scope1)}</div>
-                    <div className="card-label">Direct Emissions • {((totals.scope1 / totals.total) * 100).toFixed(1)}%</div>
+                    <div className="card-label">{t('dashboard.scope1_subtitle', 'Direct Emissions')} • {((totals.scope1 / totals.total) * 100).toFixed(1)}%</div>
                     <div className="progress-bar"><div className="progress-fill" style={{ width: `${(totals.scope1 / totals.total) * 100}%`, background: 'var(--gradient-scope1)' }}></div></div>
                 </div>
 

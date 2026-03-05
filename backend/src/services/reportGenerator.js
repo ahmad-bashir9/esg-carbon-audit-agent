@@ -37,6 +37,11 @@ class ReportGenerator {
                 // Scope Breakdown
                 this._addScopeBreakdown(doc, emissionData);
 
+                // Vertical-Specific Sections (e.g., CSRD Transport Annex)
+                if (options.vertical && options.vertical.report_templates) {
+                    this._addVerticalSections(doc, emissionData, options.vertical);
+                }
+
                 // Footer
                 this._addFooter(doc);
 
@@ -195,6 +200,53 @@ class ReportGenerator {
         formatScope('Scope 1: Direct Emissions', emissionData.scope1, emissionData.totals.scope1, '#f97316');
         formatScope('Scope 2: Energy Indirect', emissionData.scope2, emissionData.totals.scope2, '#3b82f6');
         formatScope('Scope 3: Value Chain', emissionData.scope3, emissionData.totals.scope3, '#10b981');
+    }
+
+    _addVerticalSections(doc, emissionData, vertical) {
+        if (!vertical.report_templates) return;
+
+        for (const template of vertical.report_templates) {
+            doc.addPage();
+            doc.fillColor('#0f172a').fontSize(16).text(template.name, 50, 50).moveDown(1);
+
+            doc.fontSize(10).fillColor('#334155')
+                .text(`Industry-specific disclosure specialized for the ${vertical.label} vertical.`, { italic: true })
+                .moveDown(1);
+
+            if (template.id === 'csrd_transport_annex') {
+                this._addTransportAnnex(doc, emissionData);
+            } else {
+                doc.text(template.description);
+            }
+        }
+    }
+
+    _addTransportAnnex(doc, emissionData) {
+        doc.fontSize(12).fillColor('#0f172a').text('Freight & Logistics Performance Metrics').moveDown(0.5);
+
+        const logisticsEntries = [...emissionData.scope1, ...emissionData.scope2, ...emissionData.scope3].filter(e =>
+            e.category === 'Fuel Combustion' || e.category === 'Downstream Transport' || e.activity_type?.includes('freight')
+        );
+
+        const stats = logisticsEntries.reduce((acc, e) => {
+            const type = e.activity_type || 'Other';
+            if (!acc[type]) acc[type] = 0;
+            acc[type] += e.co2e_kg;
+            return acc;
+        }, {});
+
+        doc.fontSize(10).fillColor('#334155');
+        doc.text('Performance by Transport Mode (kg CO2e):').moveDown(0.5);
+
+        Object.entries(stats).forEach(([mode, value]) => {
+            doc.text(`• ${mode}: ${Math.round(value).toLocaleString()} kg CO2e`, { indent: 20 });
+        });
+
+        doc.moveDown(1);
+        doc.fontSize(11).text('Methodology Compliance:').moveDown(0.5);
+        doc.fontSize(9).fillColor('#64748b').text(
+            'In accordance with ESRS E1 and the GLEC Framework 3.0, these emissions reflect well-to-wheel (WTW) impacts where data quality allows. Logistics-specific emission factors from DEFRA 2024 have been applied to primary activity data.'
+        );
     }
 
     _addFooter(doc) {

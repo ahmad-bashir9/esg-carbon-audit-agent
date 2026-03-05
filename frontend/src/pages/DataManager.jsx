@@ -12,7 +12,7 @@ const CATEGORY_MAP = {
     3: ['Purchased Goods', 'Downstream Transport', 'Business Travel', 'Employee Commute', 'Waste Disposal'],
 };
 
-export default function DataManager() {
+export default function DataManager({ vertical, t }) {
     const [activities, setActivities] = useState([]);
     const [stats, setStats] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -209,7 +209,9 @@ export default function DataManager() {
                                 <label className="form-label">Scope *</label>
                                 <select className="form-select" value={newRecord.scope}
                                     onChange={e => setNewRecord({ ...newRecord, scope: parseInt(e.target.value), category: CATEGORY_MAP[e.target.value]?.[0] || '' })}>
-                                    {SCOPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                    <option value={1}>{t('data_manager.scope1', 'Scope 1 – Direct')}</option>
+                                    <option value={2}>{t('data_manager.scope2', 'Scope 2 – Energy')}</option>
+                                    <option value={3}>{t('data_manager.scope3', 'Scope 3 – Value Chain')}</option>
                                 </select>
                             </div>
                             <div className="form-group">

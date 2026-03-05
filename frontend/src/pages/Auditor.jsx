@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-export default function Auditor({ alerts, status, onAcknowledge, onSimulateAnomaly, onRefresh }) {
+export default function Auditor({ alerts, status, onAcknowledge, onSimulateAnomaly, onRefresh, vertical, t }) {
     const [simScope, setSimScope] = useState('scope1');
     const [simMultiplier, setSimMultiplier] = useState(1.5);
     const [simulating, setSimulating] = useState(false);
