@@ -14,6 +14,28 @@ class ReportGenerator {
         const companyName = options.companyName || 'Unknown Company';
         const reportingPeriod = options.reportingPeriod || new Date().toISOString().slice(0, 7);
         const framework = options.framework || 'CSRD & SEC Aligned';
+        const generated = new Date().toISOString();
+
+        let pageNum = 1;
+        let stampingFooter = false;
+        const stampFooter = () => {
+            if (stampingFooter) return;
+            stampingFooter = true;
+            const savedY = doc.y;
+            const savedX = doc.x;
+            doc.fontSize(8).fillColor('#94a3b8')
+                .text(`CarbonLens  |  Page ${pageNum}  |  ${generated.slice(0, 10)}`,
+                    50, doc.page.height - 40,
+                    { align: 'center', width: doc.page.width - 100, lineBreak: false });
+            doc.x = savedX;
+            doc.y = savedY;
+            stampingFooter = false;
+        };
+
+        doc.on('pageAdded', () => {
+            pageNum++;
+            stampFooter();
+        });
 
         const history = await db.getSnapshots(2);
         let previousTotal = null;
@@ -23,14 +45,14 @@ class ReportGenerator {
 
         this._addHeader(doc, companyName, reportingPeriod, framework);
         this._addExecutiveSummary(doc, emissionData.totals, previousTotal);
-        await this._addCharts(doc, emissionData);
+        this._addChartSection(doc, emissionData);
+        stampFooter();
+
         this._addScopeBreakdown(doc, emissionData);
 
         if (options.vertical && options.vertical.report_templates) {
             this._addVerticalSections(doc, emissionData, options.vertical);
         }
-
-        this._addFooter(doc);
 
         return new Promise((resolve, reject) => {
             doc.on('end', () => resolve(Buffer.concat(buffers)));
@@ -58,7 +80,6 @@ class ReportGenerator {
             .text('This autonomous report provides a comprehensive overview of greenhouse gas (GHG) emissions calculated in accordance with the GHG Protocol corporate standard. Data was ingested via MCP integrations from enterprise ERP and CRM systems, categorized using Gemini AI, and monitored for deviations.')
             .moveDown(1);
 
-        // Summary Box
         doc.rect(50, doc.y, 495, 80).fillAndStroke('#f8fafc', '#e2e8f0');
 
         doc.fillColor('#0f172a').fontSize(12).text('Total Carbon Footprint', 70, doc.y - 65);
@@ -74,7 +95,7 @@ class ReportGenerator {
         doc.moveDown(4);
     }
 
-    async _addCharts(doc, emissionData) {
+    _addChartSection(doc, emissionData) {
         doc.fillColor('#0f172a').fontSize(16).text('Emissions by Scope', 50, doc.y).moveDown(1);
 
         const scopeData = [
@@ -83,10 +104,19 @@ class ReportGenerator {
             { name: 'Scope 3', value: emissionData.totals.scope3, color: '#10b981' }
         ].filter(d => d.value > 0);
 
-        const svgString = this._generatePieChartSVG(scopeData, 300, 200);
-        SVGtoPDF(doc, svgString, 150, doc.y, { width: 300, height: 200 });
+        if (scopeData.length === 0) {
+            doc.fontSize(10).fillColor('#94a3b8').text('No emission data available for chart.').moveDown(2);
+            return;
+        }
 
-        doc.moveDown(14);
+        try {
+            const svgString = this._generatePieChartSVG(scopeData, 300, 200);
+            SVGtoPDF(doc, svgString, 150, doc.y, { width: 300, height: 200 });
+            doc.moveDown(14);
+        } catch (err) {
+            console.error('Chart generation failed, skipping:', err.message);
+            doc.fontSize(10).fillColor('#94a3b8').text('[Chart could not be rendered]').moveDown(2);
+        }
     }
 
     _generatePieChartSVG(data, width, height) {
@@ -122,7 +152,6 @@ class ReportGenerator {
             .style('fill', '#ffffff')
             .text(d => `${Math.round((d.data.value / d3.sum(data, v => v.value)) * 100)}%`);
 
-        // Legend
         const legend = svg.append('g').attr('transform', `translate(${width - 80}, 20)`);
         const legendItems = legend.selectAll('g').data(data).enter().append('g')
             .attr('transform', (d, i) => `translate(0, ${i * 20})`);
@@ -144,10 +173,14 @@ class ReportGenerator {
         doc.fillColor('#0f172a').fontSize(16).text('Detailed Breakdown', 50, 50).moveDown(1);
 
         const formatScope = (title, items, total, color) => {
+            if (doc.y > doc.page.height - 120) {
+                doc.addPage();
+            }
+
             doc.fillColor(color).fontSize(14).text(`${title} (${Math.round(total).toLocaleString()} kg CO2e)`);
             doc.moveDown(0.5);
 
-            if (items.length === 0) {
+            if (!items || items.length === 0) {
                 doc.fontSize(10).fillColor('#94a3b8').text('No data recorded for this scope.').moveDown(1);
                 return;
             }
@@ -166,16 +199,17 @@ class ReportGenerator {
 
             doc.fillColor('#334155');
             for (const item of items) {
-                if (startY > doc.page.height - 100) {
+                if (startY > doc.page.height - 80) {
                     doc.addPage();
                     startY = 50;
                 }
 
-                doc.text(item.category, startX, startY, { width: 120 });
-                const sourceDesc = item.source.length > 30 ? item.source.slice(0, 27) + '...' : item.source;
+                doc.fontSize(10);
+                doc.text(item.category || '—', startX, startY, { width: 120 });
+                const sourceDesc = (item.source || '').length > 30 ? item.source.slice(0, 27) + '...' : (item.source || '—');
                 doc.text(sourceDesc, startX + 130, startY, { width: 180 });
-                doc.text(`${item.activity_data} ${item.activity_unit}`, startX + 320, startY, { width: 70, align: 'right' });
-                doc.text(Math.round(item.co2e_kg).toLocaleString(), startX + 400, startY, { width: 95, align: 'right' });
+                doc.text(`${item.activity_data ?? ''} ${item.activity_unit ?? ''}`.trim() || '—', startX + 320, startY, { width: 70, align: 'right' });
+                doc.text(Math.round(item.co2e_kg || 0).toLocaleString(), startX + 400, startY, { width: 95, align: 'right' });
 
                 doc.moveTo(startX, startY + 12).lineTo(startX + 495, startY + 12).stroke('#f1f5f9');
                 startY += 18;
@@ -211,7 +245,7 @@ class ReportGenerator {
     _addTransportAnnex(doc, emissionData) {
         doc.fontSize(12).fillColor('#0f172a').text('Freight & Logistics Performance Metrics').moveDown(0.5);
 
-        const logisticsEntries = [...emissionData.scope1, ...emissionData.scope2, ...emissionData.scope3].filter(e =>
+        const logisticsEntries = [...(emissionData.scope1 || []), ...(emissionData.scope2 || []), ...(emissionData.scope3 || [])].filter(e =>
             e.category === 'Fuel Combustion' || e.category === 'Downstream Transport' || e.activity_type?.includes('freight')
         );
 
@@ -234,17 +268,6 @@ class ReportGenerator {
         doc.fontSize(9).fillColor('#64748b').text(
             'In accordance with ESRS E1 and the GLEC Framework 3.0, these emissions reflect well-to-wheel (WTW) impacts where data quality allows. Logistics-specific emission factors from DEFRA 2024 have been applied to primary activity data.'
         );
-    }
-
-    _addFooter(doc) {
-        const pages = doc.bufferedPageRange();
-        for (let i = 0; i < pages.count; i++) {
-            doc.switchToPage(i);
-            doc.fontSize(8)
-                .fillColor('#94a3b8')
-                .text(`Page ${i + 1} of ${pages.count}`, 0, doc.page.height - 40, { align: 'center' })
-                .text(new Date().toISOString(), 50, doc.page.height - 40, { align: 'left' });
-        }
     }
 }
 

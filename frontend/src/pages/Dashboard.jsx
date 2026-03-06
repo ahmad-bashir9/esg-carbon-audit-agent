@@ -584,7 +584,7 @@ export default function Dashboard() {
                 <div className="card-header">
                     <span className="card-title">Detailed Emission Line Items</span>
                     <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-                        {scope1.length + scope2.length + scope3.length} entries &bull; Audit Ready
+                        Top 10 of {scope1.length + scope2.length + scope3.length} entries &bull; Audit Ready
                     </span>
                 </div>
                 <div style={{ overflowX: 'auto' }}>
@@ -601,7 +601,7 @@ export default function Dashboard() {
                             </tr>
                         </thead>
                         <tbody>
-                            {[...scope1, ...scope2, ...scope3.slice(0, 10)].map((entry) => (
+                            {[...scope1, ...scope2, ...scope3].slice(0, 10).map((entry) => (
                                 <tr key={entry.id}>
                                     <td style={{ color: 'var(--text-primary)', fontWeight: 500, maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.source}</td>
                                     <td><span className={`scope-badge scope-${entry.scope}`}>{scopeLabel(entry.scope)}</span></td>
