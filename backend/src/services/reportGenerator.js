@@ -6,49 +6,36 @@ import SVGtoPDF from 'svg-to-pdfkit';
 
 class ReportGenerator {
     async generateReport(emissionData, options = {}) {
-        return new Promise(async (resolve, reject) => {
-            try {
-                const doc = new PDFDocument({ margin: 50, size: 'A4' });
-                const buffers = [];
+        const doc = new PDFDocument({ margin: 50, size: 'A4' });
+        const buffers = [];
 
-                doc.on('data', buffers.push.bind(buffers));
-                doc.on('end', () => resolve(Buffer.concat(buffers)));
+        doc.on('data', buffers.push.bind(buffers));
 
-                const companyName = options.companyName || 'Unknown Company';
-                const reportingPeriod = options.reportingPeriod || new Date().toISOString().slice(0, 7);
-                const framework = options.framework || 'CSRD & SEC Aligned';
+        const companyName = options.companyName || 'Unknown Company';
+        const reportingPeriod = options.reportingPeriod || new Date().toISOString().slice(0, 7);
+        const framework = options.framework || 'CSRD & SEC Aligned';
 
-                // History for YoY Comparison
-                const history = await db.getSnapshots(2);
-                let previousTotal = null;
-                if (history.length > 1) {
-                    previousTotal = history[1].total;
-                }
+        const history = await db.getSnapshots(2);
+        let previousTotal = null;
+        if (history.length > 1) {
+            previousTotal = history[1].total;
+        }
 
-                // Title Page
-                this._addHeader(doc, companyName, reportingPeriod, framework);
+        this._addHeader(doc, companyName, reportingPeriod, framework);
+        this._addExecutiveSummary(doc, emissionData.totals, previousTotal);
+        await this._addCharts(doc, emissionData);
+        this._addScopeBreakdown(doc, emissionData);
 
-                // Executive Summary
-                this._addExecutiveSummary(doc, emissionData.totals, previousTotal);
+        if (options.vertical && options.vertical.report_templates) {
+            this._addVerticalSections(doc, emissionData, options.vertical);
+        }
 
-                // Charts
-                await this._addCharts(doc, emissionData);
+        this._addFooter(doc);
 
-                // Scope Breakdown
-                this._addScopeBreakdown(doc, emissionData);
-
-                // Vertical-Specific Sections (e.g., CSRD Transport Annex)
-                if (options.vertical && options.vertical.report_templates) {
-                    this._addVerticalSections(doc, emissionData, options.vertical);
-                }
-
-                // Footer
-                this._addFooter(doc);
-
-                doc.end();
-            } catch (err) {
-                reject(err);
-            }
+        return new Promise((resolve, reject) => {
+            doc.on('end', () => resolve(Buffer.concat(buffers)));
+            doc.on('error', reject);
+            doc.end();
         });
     }
 

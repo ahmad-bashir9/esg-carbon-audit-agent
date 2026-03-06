@@ -26,7 +26,10 @@ export const VERTICALS = {
             'data_manager.scope1_mobile': 'Fleet Operations',
             'reports.scope1_title': 'Direct Logistics Emissions',
         },
-        reportTemplates: ['CSRD Transport Annex', 'GHG Protocol Logistics']
+        report_templates: [
+            { id: 'csrd_transport_annex', name: 'CSRD Transport Annex', description: 'Annex for CSRD transport-related disclosures under ESRS E1.' },
+            { id: 'ghg_protocol_logistics', name: 'GHG Protocol Logistics', description: 'GHG Protocol guidance for logistics and freight operations.' },
+        ]
     },
     default: {
         id: 'default',

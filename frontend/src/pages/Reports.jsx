@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
+import { useToast } from '../context/ToastContext';
 
 export default function Reports() {
+    const toast = useToast();
     const [company, setCompany] = useState('Acme Corporation');
     const [period, setPeriod] = useState('2026-02');
     const [framework, setFramework] = useState('CSRD & SEC');
@@ -15,20 +17,24 @@ export default function Reports() {
             const params = new URLSearchParams({ company, period, framework });
             const res = await fetch(`/api/report?${params}`);
 
-            if (res.ok) {
-                const blob = await res.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `ESG_Report_${company.replace(/\s+/g, '_')}_${period}.pdf`;
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-                setGenerated(true);
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.error || `Report generation failed (${res.status})`);
             }
+
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `ESG_Report_${company.replace(/\s+/g, '_')}_${period}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            setGenerated(true);
+            toast.success('PDF report generated and downloaded');
         } catch (err) {
-            console.error('Report generation failed:', err);
+            toast.error(err.message);
         } finally {
             setGenerating(false);
         }
@@ -41,7 +47,7 @@ export default function Reports() {
                 <p>Auto-generate PDF reports compliant with CSRD and SEC climate disclosure standards</p>
             </div>
 
-            {/* ── Configuration ────────────────────────────────────── */}
+            {/* Configuration */}
             <div className="card animate-in" style={{ marginBottom: '28px' }}>
                 <div className="card-header">
                     <span className="card-title">📄 Report Configuration</span>
@@ -61,7 +67,7 @@ export default function Reports() {
                             <option value="CSRD & SEC">CSRD & SEC (Full Compliance)</option>
                             <option value="CSRD">CSRD Only</option>
                             <option value="SEC">SEC Only</option>
-                            <option value="GHG Protocol">GHG Protocol Standard</option>
+                            <option value="GHG Protocol">Greenhouse Gas Protocol Standard</option>
                         </select>
                     </div>
                     <div className="form-group" style={{ justifyContent: 'flex-end' }}>
@@ -76,7 +82,7 @@ export default function Reports() {
                 </div>
             </div>
 
-            {/* ── Success Message ──────────────────────────────────── */}
+            {/* Success Message */}
             {generated && (
                 <div className="card animate-in" style={{ borderLeft: '3px solid var(--accent-emerald)', marginBottom: '28px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -84,15 +90,15 @@ export default function Reports() {
                         <div>
                             <div style={{ fontWeight: 600, color: 'var(--accent-emerald)' }}>Report Generated Successfully</div>
                             <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                                Your PDF sustainability report has been downloaded. It includes Scope 1, 2, and 3 emissions
-                                with full GHG Protocol methodology and {framework} compliance formatting.
+                                Your PDF sustainability report has been downloaded. It includes Direct, Energy, and Supply Chain emissions
+                                with full Greenhouse Gas Protocol methodology and {framework} compliance formatting.
                             </div>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* ── Report Specs ─────────────────────────────────────── */}
+            {/* Report Specs */}
             <div className="charts-grid">
                 <div className="card animate-in">
                     <div className="card-header">
@@ -100,11 +106,11 @@ export default function Reports() {
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                         {[
-                            { icon: '📊', title: 'Executive Summary', desc: 'High-level overview of total emissions by scope with percentage breakdowns' },
-                            { icon: '🔥', title: 'Scope 1 – Direct Emissions', desc: 'Fuel combustion data from fleet vehicles and manufacturing facilities' },
-                            { icon: '⚡', title: 'Scope 2 – Energy Indirect', desc: 'Purchased electricity and steam consumption across all facilities' },
-                            { icon: '🌐', title: 'Scope 3 – Value Chain', desc: 'Transportation, business travel, employee commute, purchased goods, waste' },
-                            { icon: '📐', title: 'Methodology & Compliance', desc: 'GHG Protocol methodology, calculation formula, and data source documentation' },
+                            { icon: '📊', title: 'Executive Summary', desc: 'High-level overview of total emissions by category with percentage breakdowns' },
+                            { icon: '🔥', title: 'Direct Emissions — Fuel & Fleet', desc: 'Fuel combustion data from fleet vehicles and manufacturing facilities' },
+                            { icon: '⚡', title: 'Energy Emissions — Electricity & Heat', desc: 'Purchased electricity and steam consumption across all facilities' },
+                            { icon: '🌐', title: 'Supply Chain Emissions', desc: 'Transportation, business travel, employee commute, purchased goods, waste' },
+                            { icon: '📐', title: 'Methodology & Compliance', desc: 'Greenhouse Gas Protocol methodology, calculation formula, and data source documentation' },
                         ].map(item => (
                             <div key={item.title} className="hotspot-item" style={{ margin: 0 }}>
                                 <div style={{ fontSize: '22px', flexShrink: 0 }}>{item.icon}</div>
@@ -129,7 +135,7 @@ export default function Reports() {
                             </div>
                             <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
                                 EU directive requiring detailed sustainability disclosures. Report covers ESRS E1 (Climate Change)
-                                including GHG emissions, transition plans, and energy metrics.
+                                including greenhouse gas emissions, transition plans, and energy metrics.
                             </p>
                         </div>
                         <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '16px' }}>
@@ -139,17 +145,17 @@ export default function Reports() {
                             </div>
                             <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
                                 US Securities and Exchange Commission regulations for climate risk disclosure.
-                                Report includes Scope 1 & 2 emissions (required) and Scope 3 (encouraged).
+                                Report includes Direct & Energy emissions (required) and Supply Chain (encouraged).
                             </p>
                         </div>
                         <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '16px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
                                 <span className="scope-badge scope-3">GHG</span>
-                                <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>GHG Protocol Corporate Standard</span>
+                                <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>Greenhouse Gas Protocol Corporate Standard</span>
                             </div>
                             <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                                Core methodology: CO₂e = Activity Data × Emission Factor. Uses EPA, DEFRA,
-                                and GHG Protocol emission factor databases as source references.
+                                Core methodology: Carbon Equivalent = Activity Data × Emission Factor. Uses EPA, DEFRA,
+                                and Greenhouse Gas Protocol emission factor databases as source references.
                             </p>
                         </div>
                     </div>

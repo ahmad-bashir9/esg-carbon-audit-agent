@@ -1,6 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useApp } from '../context/AppContext';
+import { useToast } from '../context/ToastContext';
+import { api } from '../utils/api';
+import { scopeLabel, SCOPE_LABELS } from '../utils/format';
 
-export default function Auditor({ alerts, status, onAcknowledge, onSimulateAnomaly, onRefresh, vertical, t }) {
+export default function Auditor() {
+    const { alerts, status, acknowledgeAlert, simulateAnomaly, fetchAlerts } = useApp();
+    const toast = useToast();
     const [simScope, setSimScope] = useState('scope1');
     const [simMultiplier, setSimMultiplier] = useState(1.5);
     const [simulating, setSimulating] = useState(false);
@@ -8,34 +14,35 @@ export default function Auditor({ alerts, status, onAcknowledge, onSimulateAnoma
     const [savingThresholds, setSavingThresholds] = useState(false);
 
     useEffect(() => {
-        fetch('/api/settings').then(r => r.json()).then(j => {
-            if (j.success) setThresholds(j.data);
-        }).catch(() => { });
+        api.get('/settings').then(j => setThresholds(j.data)).catch(() => { });
     }, []);
 
     const handleSimulate = async () => {
         setSimulating(true);
-        await onSimulateAnomaly(simScope, simMultiplier);
-        setSimulating(false);
+        try {
+            await simulateAnomaly(simScope, simMultiplier);
+            toast.warning('Anomaly injected — check alerts below');
+        } catch (err) {
+            toast.error(err.message);
+        } finally {
+            setSimulating(false);
+        }
     };
 
     const handleSaveThresholds = async () => {
         setSavingThresholds(true);
         try {
-            await fetch('/api/settings', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(thresholds),
-            });
+            await api.put('/settings', thresholds);
+            toast.success('Thresholds saved');
         } catch (err) {
-            console.error('Failed to save thresholds:', err);
+            toast.error('Failed to save thresholds: ' + err.message);
         } finally {
             setSavingThresholds(false);
         }
     };
 
-    const unresolvedAlerts = alerts.filter(a => !a.acknowledged);
-    const resolvedAlerts = alerts.filter(a => a.acknowledged);
+    const unresolvedAlerts = useMemo(() => alerts.filter(a => !a.acknowledged), [alerts]);
+    const resolvedAlerts = useMemo(() => alerts.filter(a => a.acknowledged), [alerts]);
 
     const parseRCA = (alert) => {
         try {
@@ -51,14 +58,14 @@ export default function Auditor({ alerts, status, onAcknowledge, onSimulateAnoma
                         <h2>Auditor Agent</h2>
                         <p>Autonomous monitoring with configurable deviation thresholds</p>
                     </div>
-                    <button className="btn btn-secondary" onClick={onRefresh}>
+                    <button className="btn btn-secondary" onClick={fetchAlerts}>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M23 4v6h-6" /><path d="M1 20v-6h6" /><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" /></svg>
                         Refresh
                     </button>
                 </div>
             </div>
 
-            {/* ── Status Cards ─────────────────────────────────────── */}
+            {/* Status Cards */}
             <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
                 <div className="card stat-card animate-in" style={{ borderTop: '3px solid var(--accent-emerald)' }}>
                     <div className="card-title" style={{ marginBottom: '12px' }}>Agent Status</div>
@@ -82,7 +89,7 @@ export default function Auditor({ alerts, status, onAcknowledge, onSimulateAnoma
                 </div>
             </div>
 
-            {/* ── Threshold Configuration ──────────────────────────── */}
+            {/* Threshold Configuration */}
             <div className="card animate-in" style={{ marginBottom: '28px' }}>
                 <div className="card-header">
                     <span className="card-title">⚙️ Deviation Thresholds</span>
@@ -93,19 +100,19 @@ export default function Auditor({ alerts, status, onAcknowledge, onSimulateAnoma
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px' }}>
                     {[
                         { key: 'auditor_threshold', label: 'Global Threshold' },
-                        { key: 'auditor_scope1_threshold', label: 'Scope 1 Threshold' },
-                        { key: 'auditor_scope2_threshold', label: 'Scope 2 Threshold' },
-                        { key: 'auditor_scope3_threshold', label: 'Scope 3 Threshold' },
-                    ].map(t => (
-                        <div key={t.key} className="form-group">
-                            <label className="form-label">{t.label}</label>
+                        { key: 'auditor_scope1_threshold', label: `${scopeLabel(1, 'full')} Threshold` },
+                        { key: 'auditor_scope2_threshold', label: `${scopeLabel(2, 'full')} Threshold` },
+                        { key: 'auditor_scope3_threshold', label: `${scopeLabel(3, 'full')} Threshold` },
+                    ].map(item => (
+                        <div key={item.key} className="form-group">
+                            <label className="form-label">{item.label}</label>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                 <input className="form-input" type="number" step="0.01" min="0.01" max="1"
-                                    value={thresholds[t.key] || '0.10'}
-                                    onChange={e => setThresholds({ ...thresholds, [t.key]: e.target.value })}
+                                    value={thresholds[item.key] || '0.10'}
+                                    onChange={e => setThresholds({ ...thresholds, [item.key]: e.target.value })}
                                     style={{ width: '80px' }} />
                                 <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                    ({((parseFloat(thresholds[t.key]) || 0.10) * 100).toFixed(0)}%)
+                                    ({((parseFloat(thresholds[item.key]) || 0.10) * 100).toFixed(0)}%)
                                 </span>
                             </div>
                         </div>
@@ -113,7 +120,7 @@ export default function Auditor({ alerts, status, onAcknowledge, onSimulateAnoma
                 </div>
             </div>
 
-            {/* ── Anomaly Simulator ────────────────────────────────── */}
+            {/* Anomaly Simulator */}
             <div className="card animate-in" style={{ marginBottom: '28px' }}>
                 <div className="card-header">
                     <span className="card-title">🧪 Anomaly Simulator</span>
@@ -121,11 +128,11 @@ export default function Auditor({ alerts, status, onAcknowledge, onSimulateAnoma
                 </div>
                 <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
                     <div className="form-group">
-                        <label className="form-label">Target Scope</label>
+                        <label className="form-label">Target Category</label>
                         <select className="form-select" value={simScope} onChange={e => setSimScope(e.target.value)}>
-                            <option value="scope1">Scope 1 – Direct</option>
-                            <option value="scope2">Scope 2 – Energy</option>
-                            <option value="scope3">Scope 3 – Value Chain</option>
+                            <option value="scope1">{SCOPE_LABELS[1].option}</option>
+                            <option value="scope2">{SCOPE_LABELS[2].option}</option>
+                            <option value="scope3">{SCOPE_LABELS[3].option}</option>
                         </select>
                     </div>
                     <div className="form-group">
@@ -145,7 +152,7 @@ export default function Auditor({ alerts, status, onAcknowledge, onSimulateAnoma
                 </div>
             </div>
 
-            {/* ── Active Alerts ────────────────────────────────────── */}
+            {/* Active Alerts */}
             <div style={{ marginBottom: '28px' }}>
                 <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '16px', color: 'var(--text-primary)' }}>
                     🔔 Active Alerts ({unresolvedAlerts.length})
@@ -170,12 +177,11 @@ export default function Auditor({ alerts, status, onAcknowledge, onSimulateAnoma
                                     </div>
                                     <div className="alert-message">{alert.message}</div>
                                     <div className="alert-meta">
-                                        <span>Baseline: {(alert.baseline_value || alert.baselineValue)?.toLocaleString()} kg</span>
-                                        <span>Current: {(alert.current_value || alert.currentValue)?.toLocaleString()} kg</span>
-                                        <span>Deviation: {(alert.deviation_percent || alert.deviationPercent) > 0 ? '+' : ''}{alert.deviation_percent || alert.deviationPercent}%</span>
+                                        <span>Baseline: {(alert.baseline_value ?? alert.baselineValue)?.toLocaleString()} kg</span>
+                                        <span>Current: {(alert.current_value ?? alert.currentValue)?.toLocaleString()} kg</span>
+                                        <span>Deviation: {(alert.deviation_percent ?? alert.deviationPercent) > 0 ? '+' : ''}{alert.deviation_percent ?? alert.deviationPercent}%</span>
                                         <span>{new Date(alert.timestamp).toLocaleString()}</span>
                                     </div>
-                                    {/* Root Cause Analysis */}
                                     {rca && (
                                         <div style={{ marginTop: '12px', padding: '12px', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-sm)', borderLeft: '3px solid var(--accent-violet)' }}>
                                             <div style={{ fontSize: '0.7rem', color: 'var(--accent-violet)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px' }}>
@@ -194,7 +200,7 @@ export default function Auditor({ alerts, status, onAcknowledge, onSimulateAnoma
                                     )}
                                 </div>
                                 <div className="alert-actions">
-                                    <button className="btn btn-ghost btn-sm" onClick={() => onAcknowledge(alert.id)}>✓ Acknowledge</button>
+                                    <button className="btn btn-ghost btn-sm" onClick={() => acknowledgeAlert(alert.id)}>✓ Acknowledge</button>
                                 </div>
                             </div>
                         );
@@ -202,7 +208,7 @@ export default function Auditor({ alerts, status, onAcknowledge, onSimulateAnoma
                 )}
             </div>
 
-            {/* ── Resolved Alerts ──────────────────────────────────── */}
+            {/* Resolved Alerts */}
             {resolvedAlerts.length > 0 && (
                 <div>
                     <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '16px', color: 'var(--text-muted)' }}>

@@ -62,7 +62,22 @@ class EmissionEngine {
                     : EMISSION_FACTORS.steam['Default'];
                 factor = f.factor;
             } else {
-                const f = EMISSION_FACTORS.transport['Road Freight'];
+                const category = act.category || '';
+                const sourceType = act.source_type || '';
+                let f;
+                if (category === 'Downstream Transport' || category.includes('Transport')) {
+                    f = EMISSION_FACTORS.transport[sourceType] || EMISSION_FACTORS.transport['Road Freight'];
+                } else if (category === 'Business Travel') {
+                    f = EMISSION_FACTORS.businessTravel[sourceType] || EMISSION_FACTORS.businessTravel['Car'];
+                } else if (category === 'Employee Commute') {
+                    f = EMISSION_FACTORS.commute[sourceType] || EMISSION_FACTORS.commute['Car'];
+                } else if (category === 'Waste Disposal') {
+                    f = EMISSION_FACTORS.waste[sourceType] || EMISSION_FACTORS.waste['Landfill'];
+                } else if (category === 'Purchased Goods') {
+                    f = EMISSION_FACTORS.materials[sourceType] || EMISSION_FACTORS.materials['Default'];
+                } else {
+                    f = EMISSION_FACTORS.transport['Road Freight'];
+                }
                 factor = f.factor;
             }
         }
@@ -90,12 +105,10 @@ class EmissionEngine {
         };
     }
 
-    /**
-     * Legacy support for specialized calculation methods
-     */
     calculateAll(activityData) {
-        // Fallback or conversion from old data structures if necessary
-        return this.calculateWithFactors({ activities: [] }, {});
+        const activities = activityData.activities || activityData;
+        const normalized = Array.isArray(activities) ? activities : [];
+        return this.calculateWithFactors({ activities: normalized }, {});
     }
 
     _getConfidence(source) {
