@@ -1,7 +1,7 @@
 import express from 'express';
 import multer from 'multer';
 import { parse } from 'csv-parse/sync';
-import { readFileSync, unlinkSync } from 'fs';
+import { readFileSync, unlinkSync, mkdirSync } from 'fs';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
@@ -17,9 +17,12 @@ import { EMISSION_FACTORS } from '../utils/emissionFactors.js';
 const JWT_SECRET = process.env.JWT_SECRET || 'carbonlens-dev-secret-change-in-production';
 const JWT_EXPIRES = '7d';
 
+const UPLOAD_DIR = process.env.VERCEL ? '/tmp/uploads' : 'uploads';
+mkdirSync(UPLOAD_DIR, { recursive: true });
+
 const router = express.Router();
 const upload = multer({
-    dest: 'uploads/',
+    dest: UPLOAD_DIR,
     limits: { fileSize: 10 * 1024 * 1024 },
     fileFilter: (req, file, cb) => {
         if (file.mimetype === 'text/csv' || file.originalname.endsWith('.csv')) {
