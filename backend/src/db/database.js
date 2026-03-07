@@ -6,7 +6,9 @@ import { dirname, resolve } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const DB_PATH = resolve(__dirname, '../../carbonlens.db');
+const DB_PATH = process.env.VERCEL
+    ? '/tmp/carbonlens.db'
+    : resolve(__dirname, '../../carbonlens.db');
 
 class DB {
   constructor() {

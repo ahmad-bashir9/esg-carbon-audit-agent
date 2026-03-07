@@ -10,7 +10,18 @@ export async function seedFromMCP() {
 
     console.log('🌱 Seeding database from MCP servers...');
 
-    const activityData = await mcpManager.fetchAllActivityData();
+    let activityData;
+    try {
+        activityData = await mcpManager.fetchAllActivityData();
+    } catch (err) {
+        console.warn('⚠️  MCP seed failed (expected in serverless):', err.message);
+        return;
+    }
+
+    if (!activityData) {
+        console.warn('⚠️  No MCP data available, skipping seed.');
+        return;
+    }
     const records = [];
 
     for (const log of activityData.fuelLogs) {

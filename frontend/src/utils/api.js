@@ -1,4 +1,4 @@
-const API_BASE = '/api';
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 class ApiError extends Error {
     constructor(message, status, data) {
@@ -11,10 +11,19 @@ class ApiError extends Error {
 
 async function request(endpoint, options = {}) {
     const url = `${API_BASE}${endpoint}`;
-    const res = await fetch(url, {
-        headers: { 'Content-Type': 'application/json', ...options.headers },
-        ...options,
-    });
+    let res;
+
+    try {
+        res = await fetch(url, {
+            headers: { 'Content-Type': 'application/json', ...options.headers },
+            ...options,
+        });
+    } catch (err) {
+        throw new ApiError(
+            'Cannot reach the server. Please check your connection.',
+            0,
+        );
+    }
 
     if (options.responseType === 'blob') {
         if (!res.ok) {
@@ -22,6 +31,14 @@ async function request(endpoint, options = {}) {
             throw new ApiError(text, res.status);
         }
         return res.blob();
+    }
+
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+        throw new ApiError(
+            'Server returned an unexpected response. The backend may still be starting up — please retry in a few seconds.',
+            res.status,
+        );
     }
 
     const json = await res.json();
@@ -37,7 +54,16 @@ export const api = {
     put: (endpoint, body) => request(endpoint, { method: 'PUT', body: JSON.stringify(body) }),
     del: (endpoint) => request(endpoint, { method: 'DELETE' }),
     upload: async (endpoint, formData) => {
-        const res = await fetch(`${API_BASE}${endpoint}`, { method: 'POST', body: formData });
+        let res;
+        try {
+            res = await fetch(`${API_BASE}${endpoint}`, { method: 'POST', body: formData });
+        } catch (err) {
+            throw new ApiError('Cannot reach the server.', 0);
+        }
+        const ct = res.headers.get('content-type') || '';
+        if (!ct.includes('application/json')) {
+            throw new ApiError('Server returned an unexpected response.', res.status);
+        }
         const json = await res.json();
         if (!res.ok || json.success === false) {
             throw new ApiError(json.error || 'Upload failed', res.status, json);
