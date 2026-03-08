@@ -182,30 +182,78 @@ export default function Landing() {
                     <div className="lp-hero__orb lp-hero__orb--3" />
                     <div className="lp-hero__grid" />
                 </div>
-                <div className="lp-container lp-hero__content">
-                    <div className="lp-badge">
-                        <span className="lp-badge__dot" />
-                        AI-Powered ESG Platform
+                <div className="lp-hero__split">
+                    <div className="lp-hero__text">
+                        <div className="lp-badge">
+                            <span className="lp-badge__dot" />
+                            AI-Powered ESG Platform
+                        </div>
+                        <h1 className="lp-hero__title">
+                            The carbon audit platform <span className="lp-gradient-text">built for compliance.</span>
+                        </h1>
+                        <p className="lp-hero__sub">
+                            Track Scope 1, 2 & 3 emissions. Generate CSRD & SEC reports in one click. Powered by Gemini AI.
+                        </p>
+                        <div className="lp-hero__actions">
+                            <Link to="/signup" className="lp-btn lp-btn--primary lp-btn--lg">
+                                Start Free Trial
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
+                            </Link>
+                            <a href="#features" className="lp-btn lp-btn--ghost lp-btn--lg">See Features</a>
+                        </div>
+                        <div className="lp-hero__stats">
+                            <div className="lp-stat"><strong><AnimatedCounter end={50} suffix="K+" /></strong><span>Records Processed</span></div>
+                            <div className="lp-stat__sep" />
+                            <div className="lp-stat"><strong><AnimatedCounter end={98} suffix="%" /></strong><span>Compliance Accuracy</span></div>
+                            <div className="lp-stat__sep" />
+                            <div className="lp-stat"><strong><AnimatedCounter end={10} suffix="x" /></strong><span>Faster Reporting</span></div>
+                        </div>
                     </div>
-                    <h1 className="lp-hero__title">
-                        The carbon audit platform <span className="lp-gradient-text">built for compliance.</span>
-                    </h1>
-                    <p className="lp-hero__sub">
-                        Track Scope 1, 2 & 3 emissions. Generate CSRD & SEC reports in one click. Powered by Gemini AI, trusted by sustainability teams worldwide.
-                    </p>
-                    <div className="lp-hero__actions">
-                        <Link to="/signup" className="lp-btn lp-btn--primary lp-btn--lg">
-                            Start Free Trial
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
-                        </Link>
-                        <a href="#features" className="lp-btn lp-btn--ghost lp-btn--lg">See Features</a>
-                    </div>
-                    <div className="lp-hero__stats">
-                        <div className="lp-stat"><strong><AnimatedCounter end={50} suffix="K+" /></strong><span>Records Processed</span></div>
-                        <div className="lp-stat__sep" />
-                        <div className="lp-stat"><strong><AnimatedCounter end={98} suffix="%" /></strong><span>Compliance Accuracy</span></div>
-                        <div className="lp-stat__sep" />
-                        <div className="lp-stat"><strong><AnimatedCounter end={10} suffix="x" /></strong><span>Faster Reporting</span></div>
+                    <div className="lp-hero__visual">
+                        <div className="lp-mockup">
+                            <div className="lp-mockup__bar">
+                                <span /><span /><span />
+                                <div className="lp-mockup__tab">Dashboard</div>
+                            </div>
+                            <div className="lp-mockup__body">
+                                <div className="lp-mockup__kpis">
+                                    <div className="lp-mockup__kpi">
+                                        <div className="lp-mockup__kpi-label">Total Emissions</div>
+                                        <div className="lp-mockup__kpi-value">24,850<span>kg</span></div>
+                                        <div className="lp-mockup__kpi-bar"><div style={{ width: '72%' }} /></div>
+                                    </div>
+                                    <div className="lp-mockup__kpi">
+                                        <div className="lp-mockup__kpi-label">Scope 1</div>
+                                        <div className="lp-mockup__kpi-value" style={{ color: '#f97316' }}>8,120<span>kg</span></div>
+                                        <div className="lp-mockup__kpi-bar"><div style={{ width: '45%', background: 'linear-gradient(90deg, #f97316, #f59e0b)' }} /></div>
+                                    </div>
+                                    <div className="lp-mockup__kpi">
+                                        <div className="lp-mockup__kpi-label">Scope 2</div>
+                                        <div className="lp-mockup__kpi-value" style={{ color: '#3b82f6' }}>6,430<span>kg</span></div>
+                                        <div className="lp-mockup__kpi-bar"><div style={{ width: '35%', background: 'linear-gradient(90deg, #3b82f6, #8b5cf6)' }} /></div>
+                                    </div>
+                                </div>
+                                <div className="lp-mockup__chart">
+                                    <svg viewBox="0 0 200 80" preserveAspectRatio="none">
+                                        <defs>
+                                            <linearGradient id="chartFill" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.3" />
+                                                <stop offset="100%" stopColor="#3b82f6" stopOpacity="0" />
+                                            </linearGradient>
+                                        </defs>
+                                        <path d="M0 65 Q25 55 50 48 T100 35 T150 28 T200 20" fill="none" stroke="#3b82f6" strokeWidth="2" />
+                                        <path d="M0 65 Q25 55 50 48 T100 35 T150 28 T200 20 L200 80 L0 80Z" fill="url(#chartFill)" />
+                                        <path d="M0 60 Q30 62 60 55 T120 50 T180 45 L200 42" fill="none" stroke="#10b981" strokeWidth="1.5" strokeDasharray="4 3" opacity="0.6" />
+                                    </svg>
+                                    <div className="lp-mockup__chart-labels">
+                                        <span>Jan</span><span>Mar</span><span>Jun</span><span>Sep</span><span>Dec</span>
+                                    </div>
+                                </div>
+                                <div className="lp-mockup__status">
+                                    <span className="lp-mockup__dot" /> MCP + Postgres Connected
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </section>
