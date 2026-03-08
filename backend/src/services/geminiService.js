@@ -149,9 +149,46 @@ Provide a brief root cause analysis and 2-3 recommended actions. Respond as JSON
         };
     }
 
+    async generateSQL(question) {
+        if (!this.enabled || !this.client) return null;
+
+        try {
+            const prompt = `You are a Postgres SQL expert for a carbon emissions database. Convert the user's natural language question into a single SELECT query.
+
+DATABASE SCHEMA:
+- activity_data (id, source, scope, category, quantity, unit, date, facility, department, supplier, origin, destination, transport_mode, data_source, created_at)
+- emission_calculations (id, activity_id, scope, category, source_description, activity_data, activity_unit, emission_factor, emission_factor_source, co2e_kg, calculation_method, confidence_score, date, facility, department, created_at)
+- reduction_targets (id, name, scope, target_type, baseline_year, baseline_value, target_value, target_year, status, created_at)
+- alerts (id, type, scope, category, message, current_value, baseline_value, deviation_percent, acknowledged, created_at)
+
+RULES:
+- Only SELECT queries allowed (never INSERT/UPDATE/DELETE/DROP)
+- Always LIMIT to 100 rows
+- Use co2e_kg column for emissions amounts
+- Date format is 'YYYY-MM-DD' string
+- Return ONLY the SQL query, nothing else
+
+USER QUESTION: "${question}"`;
+
+            const result = await this.client.generateContent(prompt);
+            const text = result.response.text().trim();
+            const sqlMatch = text.match(/```sql\n?([\s\S]*?)```/) || text.match(/(SELECT[\s\S]*)/i);
+            if (sqlMatch) {
+                const sql = (sqlMatch[1] || sqlMatch[0]).trim();
+                if (/^\s*(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|CREATE)/i.test(sql)) return null;
+                return sql;
+            }
+        } catch (err) {
+            console.warn('Gemini SQL generation failed:', err.message);
+        }
+        return null;
+    }
+
     async chatWithData(question, context) {
         if (this.enabled && this.client) {
             try {
+                const sqlResults = context.sqlResults ? `\n\nSQL QUERY RESULTS (from the actual database):\n${JSON.stringify(context.sqlResults, null, 2)}` : '';
+
                 const prompt = `You are CarbonLens AI, an ESG carbon audit assistant. Answer the user's question based on the following emissions data context.
 
 EMISSIONS CONTEXT:
@@ -165,13 +202,14 @@ EMISSIONS CONTEXT:
 - Record Count: ${context.recordCount || 0}
 - Recent Trends: ${JSON.stringify(context.trends || [])}
 - Active Targets: ${JSON.stringify(context.targets || [])}
+${sqlResults}
 
 USER QUESTION: "${question}"
 
-Respond in a helpful, concise manner. Use specific numbers from the data. If the question cannot be answered from the available data, say so honestly. Format numbers clearly. Keep your answer under 200 words.`;
+Respond in a helpful, concise manner. Use specific numbers from the data. If SQL query results are provided, prioritize those for your answer. Format numbers clearly. Keep your answer under 200 words.`;
 
                 const result = await this.client.generateContent(prompt);
-                return { answer: result.response.text(), source: 'gemini' };
+                return { answer: result.response.text(), source: 'gemini', sql: context.sqlQuery || null };
             } catch (err) {
                 console.warn('Gemini chat failed, using fallback:', err.message);
             }
@@ -213,6 +251,148 @@ Respond in a helpful, concise manner. Use specific numbers from the data. If the
         }
 
         return { answer: `Your carbon footprint is ${Math.round(totals.total).toLocaleString()} kg CO2e across ${context.recordCount || 0} activity records. Ask me about specific scopes, categories, facilities, or reduction strategies for more detail.`, source: 'deterministic' };
+    }
+
+    async scanGreenwashingRisk(reportData) {
+        const context = `
+REPORT DATA:
+- Total Emissions: ${reportData.totals?.total?.toFixed(0) || 0} kg CO2e
+- Scope 1: ${reportData.totals?.scope1?.toFixed(0) || 0} kg
+- Scope 2: ${reportData.totals?.scope2?.toFixed(0) || 0} kg
+- Scope 3: ${reportData.totals?.scope3?.toFixed(0) || 0} kg
+- Categories covered: ${Object.keys(reportData.byCategory || {}).join(', ')}
+- Record count: ${reportData.recordCount || 0}
+- Scope 3 categories present: ${Object.keys(reportData.byCategory || {}).filter(c => ['Purchased Goods', 'Downstream Transport', 'Business Travel', 'Employee Commute', 'Waste Disposal'].includes(c)).join(', ') || 'None'}
+- Company: ${reportData.companyName || 'Unknown'}
+- Period: ${reportData.period || 'Unknown'}
+- Framework: ${reportData.framework || 'Unknown'}`;
+
+        if (this.enabled && this.client) {
+            try {
+                const prompt = `You are a regulatory ESG compliance auditor. Analyze this emissions report for greenwashing risks BEFORE it is published. Check for:
+1. Missing Scope 3 categories (GHG Protocol requires 15 categories - flag any that are likely material but absent)
+2. Suspiciously low emissions relative to company size/industry
+3. Methodology inconsistencies
+4. Vague or unsubstantiated reduction claims
+5. Data completeness issues
+
+${context}
+
+Respond ONLY with JSON:
+{
+  "risk_score": 0-100,
+  "risk_level": "low/medium/high/critical",
+  "findings": [
+    { "category": "category name", "severity": "low/medium/high", "finding": "description", "recommendation": "what to fix" }
+  ],
+  "summary": "2-3 sentence overall assessment",
+  "missing_scope3_categories": ["category names that should be included"]
+}`;
+
+                const result = await this.client.generateContent(prompt);
+                const text = result.response.text();
+                const jsonMatch = text.match(/\{[\s\S]*\}/);
+                if (jsonMatch) return { ...JSON.parse(jsonMatch[0]), source: 'gemini' };
+            } catch (err) {
+                console.warn('Gemini greenwashing scan failed:', err.message);
+            }
+        }
+
+        return this._fallbackGreenwashingScan(reportData);
+    }
+
+    _fallbackGreenwashingScan(data) {
+        const findings = [];
+        const totals = data.totals || { total: 0, scope1: 0, scope2: 0, scope3: 0 };
+        const cats = Object.keys(data.byCategory || {});
+        const scope3Cats = ['Purchased Goods', 'Downstream Transport', 'Business Travel', 'Employee Commute', 'Waste Disposal'];
+        const presentScope3 = scope3Cats.filter(c => cats.includes(c));
+        const missingScope3 = scope3Cats.filter(c => !cats.includes(c));
+
+        if (missingScope3.length > 2) {
+            findings.push({ category: 'Scope 3 Coverage', severity: 'high', finding: `${missingScope3.length} of 5 common Scope 3 categories are missing. This understates your total footprint.`, recommendation: `Add data for: ${missingScope3.join(', ')}` });
+        }
+        if (totals.scope3 === 0 && totals.total > 0) {
+            findings.push({ category: 'Scope 3 Omission', severity: 'high', finding: 'No Scope 3 emissions reported at all. For most companies, Scope 3 is 60-80% of total footprint.', recommendation: 'Include supply chain, business travel, and employee commute data.' });
+        }
+        if ((data.recordCount || 0) < 20) {
+            findings.push({ category: 'Data Completeness', severity: 'medium', finding: `Only ${data.recordCount || 0} activity records. This may not represent a full reporting period.`, recommendation: 'Ensure all facilities and months are covered.' });
+        }
+        if (totals.scope2 > 0 && !cats.includes('Purchased Electricity')) {
+            findings.push({ category: 'Methodology', severity: 'medium', finding: 'Scope 2 emissions present but no "Purchased Electricity" category found. Check categorization.', recommendation: 'Verify emission factor methodology for energy sources.' });
+        }
+        const riskScore = Math.min(100, findings.reduce((s, f) => s + (f.severity === 'high' ? 30 : f.severity === 'medium' ? 15 : 5), 0));
+        return {
+            risk_score: riskScore,
+            risk_level: riskScore >= 60 ? 'high' : riskScore >= 30 ? 'medium' : 'low',
+            findings,
+            summary: findings.length === 0
+                ? 'No significant greenwashing risks detected. Report appears comprehensive.'
+                : `Found ${findings.length} issue(s) that should be addressed before publishing. Risk score: ${riskScore}/100.`,
+            missing_scope3_categories: missingScope3,
+            source: 'deterministic',
+        };
+    }
+
+    async generateBoardSummary(emissionData) {
+        const totals = emissionData.totals || { total: 0, scope1: 0, scope2: 0, scope3: 0 };
+        const total = totals.total || 1;
+
+        if (this.enabled && this.client) {
+            try {
+                const prompt = `You are a corporate sustainability director preparing a 5-point executive summary for the board of directors. Write in clear, authoritative business language — no jargon.
+
+EMISSIONS DATA:
+- Total: ${totals.total.toFixed(0)} kg CO2e
+- Direct Operations: ${totals.scope1.toFixed(0)} kg (${((totals.scope1/total)*100).toFixed(1)}%)
+- Energy: ${totals.scope2.toFixed(0)} kg (${((totals.scope2/total)*100).toFixed(1)}%)
+- Supply Chain: ${totals.scope3.toFixed(0)} kg (${((totals.scope3/total)*100).toFixed(1)}%)
+- Top Categories: ${JSON.stringify(emissionData.byCategory || {})}
+- Active Targets: ${JSON.stringify(emissionData.targets || [])}
+
+Respond ONLY with JSON:
+{
+  "headline": "One-line headline for the board (e.g., 'Carbon footprint reduced 8% YoY')",
+  "key_metrics": [
+    { "label": "metric name", "value": "formatted number", "trend": "up/down/flat", "context": "brief explanation" }
+  ],
+  "strategic_risks": ["risk 1", "risk 2"],
+  "recommended_actions": ["action 1", "action 2", "action 3"],
+  "forward_commitments": "1-2 sentence forward-looking statement",
+  "summary_paragraph": "3-4 sentence executive overview"
+}`;
+
+                const result = await this.client.generateContent(prompt);
+                const text = result.response.text();
+                const jsonMatch = text.match(/\{[\s\S]*\}/);
+                if (jsonMatch) return { ...JSON.parse(jsonMatch[0]), source: 'gemini' };
+            } catch (err) {
+                console.warn('Gemini board summary failed:', err.message);
+            }
+        }
+
+        const topCat = Object.entries(emissionData.byCategory || {}).sort((a,b) => b[1]-a[1])[0];
+        return {
+            headline: `Total carbon footprint: ${Math.round(totals.total).toLocaleString()} kg CO2e`,
+            key_metrics: [
+                { label: 'Total Emissions', value: `${Math.round(totals.total).toLocaleString()} kg`, trend: 'flat', context: 'Current reporting period' },
+                { label: 'Direct Operations', value: `${((totals.scope1/total)*100).toFixed(1)}%`, trend: 'flat', context: `${Math.round(totals.scope1).toLocaleString()} kg CO2e` },
+                { label: 'Energy', value: `${((totals.scope2/total)*100).toFixed(1)}%`, trend: 'flat', context: `${Math.round(totals.scope2).toLocaleString()} kg CO2e` },
+                { label: 'Supply Chain', value: `${((totals.scope3/total)*100).toFixed(1)}%`, trend: 'flat', context: `${Math.round(totals.scope3).toLocaleString()} kg CO2e` },
+            ],
+            strategic_risks: [
+                'Supply chain emissions represent the largest share and are hardest to control',
+                'Regulatory deadlines for CSRD/SEC compliance are approaching',
+            ],
+            recommended_actions: [
+                'Prioritize supplier engagement program for top 10 emission contributors',
+                'Evaluate renewable energy procurement for Scope 2 reduction',
+                'Establish science-based targets aligned with 1.5°C pathway',
+            ],
+            forward_commitments: `The organization is committed to reducing its carbon footprint through targeted interventions in its top emission category${topCat ? ` ("${topCat[0]}")` : ''} and accelerating the transition to clean energy sources.`,
+            summary_paragraph: `The organization's total greenhouse gas emissions stand at ${Math.round(totals.total).toLocaleString()} kg CO2e. Supply chain activities account for ${((totals.scope3/total)*100).toFixed(1)}% of the total footprint, followed by energy consumption at ${((totals.scope2/total)*100).toFixed(1)}%. Direct operations represent ${((totals.scope1/total)*100).toFixed(1)}%. Immediate focus areas include supplier decarbonization and renewable energy procurement.`,
+            source: 'deterministic',
+        };
     }
 
     async analyzeStrategy(params, baseline) {

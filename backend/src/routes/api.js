@@ -640,6 +640,18 @@ router.post('/chat', async (req, res) => {
             trends = snapshots.reverse().map(s => ({ date: s.timestamp?.slice(0, 10), total: Math.round(s.total) }));
         } catch (_) {}
 
+        let sqlQuery = null;
+        let sqlResults = null;
+        try {
+            sqlQuery = await geminiService.generateSQL(message);
+            if (sqlQuery) {
+                const result = await db.getAll(sqlQuery);
+                sqlResults = result.slice(0, 50);
+            }
+        } catch (err) {
+            console.warn('NL-to-SQL query failed:', err.message);
+        }
+
         const context = {
             totals: emissions.totals,
             byCategory: emissions.byCategory,
@@ -648,10 +660,12 @@ router.post('/chat', async (req, res) => {
             recordCount: activities.length,
             trends,
             targets: targets.map(t => ({ name: t.name, target_percent: t.target_percent, target_year: t.target_year, scope: t.scope })),
+            sqlQuery,
+            sqlResults,
         };
 
         const result = await geminiService.chatWithData(message, context);
-        res.json({ success: true, data: { answer: result.answer, source: result.source } });
+        res.json({ success: true, data: { answer: result.answer, source: result.source, sql: result.sql || null } });
     } catch (error) {
         console.error('Chat error:', error);
         res.status(500).json({ success: false, error: error.message });
@@ -1153,6 +1167,162 @@ async function _auditLog(entityType, entityId, action, oldValue, newValue) {
         await db.insertAuditLog({ entity_type: entityType, entity_id: String(entityId || ''), action, old_value: oldValue, new_value: newValue });
     } catch (_) { /* non-critical */ }
 }
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// CARBON BUDGET
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+router.get('/budgets', async (req, res) => {
+    try {
+        const budgets = await db.getBudgets();
+        res.json({ success: true, data: budgets });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+router.get('/budgets/:year', async (req, res) => {
+    try {
+        const year = parseInt(req.params.year);
+        const budget = await db.getBudget(year);
+        if (!budget) return res.status(404).json({ success: false, error: 'No budget for this year' });
+
+        const activeVerticalId = await db.getSetting('active_vertical') || 'default';
+        const factors = await db.getEmissionFactors(activeVerticalId);
+        const factorMap = factors.reduce((acc, f) => { acc[f.activity_type] = f; return acc; }, {});
+        const activities = await db.getActivities({});
+        const emissions = emissionEngine.calculateWithFactors({ activities }, factorMap);
+
+        const all = [...(emissions.scope1 || []), ...(emissions.scope2 || []), ...(emissions.scope3 || [])];
+        const yearEntries = all.filter(e => e.date && e.date.startsWith(String(year)));
+
+        const monthlyBurn = {};
+        for (const e of yearEntries) {
+            const m = e.date.slice(0, 7);
+            monthlyBurn[m] = (monthlyBurn[m] || 0) + (e.co2e_kg || 0);
+        }
+
+        const months = Object.keys(monthlyBurn).sort();
+        const cumulativeBurn = [];
+        let running = 0;
+        for (const m of months) {
+            running += monthlyBurn[m];
+            cumulativeBurn.push({ month: m, burn: monthlyBurn[m], cumulative: running });
+        }
+
+        const totalBurned = running;
+        const remaining = budget.annual_budget - totalBurned;
+        const monthsElapsed = months.length || 1;
+        const avgMonthlyBurn = totalBurned / monthsElapsed;
+        const projectedYearEnd = avgMonthlyBurn * 12;
+        const monthsRemaining = 12 - monthsElapsed;
+        const monthlyAllowance = monthsRemaining > 0 ? remaining / monthsRemaining : 0;
+
+        let status = 'on_track';
+        if (projectedYearEnd > budget.annual_budget * 1.1) status = 'over_budget';
+        else if (projectedYearEnd > budget.annual_budget * 0.95) status = 'at_risk';
+
+        res.json({
+            success: true,
+            data: {
+                budget,
+                totalBurned,
+                remaining,
+                percentUsed: (totalBurned / budget.annual_budget) * 100,
+                projectedYearEnd,
+                avgMonthlyBurn,
+                monthlyAllowance,
+                monthlyBurn: cumulativeBurn,
+                status,
+                monthsElapsed,
+                monthsRemaining,
+            },
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+router.post('/budgets', async (req, res) => {
+    try {
+        const { year, annual_budget, notes } = req.body;
+        if (!year || !annual_budget) return res.status(400).json({ success: false, error: 'year and annual_budget are required' });
+        await db.upsertBudget({ year: parseInt(year), annual_budget: parseFloat(annual_budget), notes });
+        res.json({ success: true, message: 'Budget saved' });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+router.delete('/budgets/:year', async (req, res) => {
+    try {
+        await db.deleteBudget(parseInt(req.params.year));
+        res.json({ success: true, message: 'Budget deleted' });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// GREENWASHING RISK SCANNER
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+router.post('/greenwash-scan', async (req, res) => {
+    try {
+        const { companyName, period, framework } = req.body;
+
+        const activeVerticalId = await db.getSetting('active_vertical') || 'default';
+        const factors = await db.getEmissionFactors(activeVerticalId);
+        const factorMap = factors.reduce((acc, f) => { acc[f.activity_type] = f; return acc; }, {});
+        const activities = await db.getActivities({});
+        const emissions = emissionEngine.calculateWithFactors({ activities }, factorMap);
+
+        const reportData = {
+            totals: emissions.totals,
+            byCategory: emissions.byCategory,
+            recordCount: activities.length,
+            companyName: companyName || 'Unknown',
+            period: period || new Date().toISOString().slice(0, 7),
+            framework: framework || 'CSRD & SEC',
+        };
+
+        const result = await geminiService.scanGreenwashingRisk(reportData);
+        res.json({ success: true, data: result });
+    } catch (error) {
+        console.error('Greenwash scan error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// BOARD REPORT GENERATOR
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+router.get('/board-summary', async (req, res) => {
+    try {
+        const activeVerticalId = await db.getSetting('active_vertical') || 'default';
+        const factors = await db.getEmissionFactors(activeVerticalId);
+        const factorMap = factors.reduce((acc, f) => { acc[f.activity_type] = f; return acc; }, {});
+        const activities = await db.getActivities({});
+        const emissions = emissionEngine.calculateWithFactors({ activities }, factorMap);
+        const targets = await db.getTargets();
+
+        const emissionData = {
+            totals: emissions.totals,
+            byCategory: emissions.byCategory,
+            byFacility: emissions.byFacility,
+            byDepartment: emissions.byDepartment,
+            recordCount: activities.length,
+            targets: targets.map(t => ({ name: t.name, target_percent: t.target_percent, target_year: t.target_year, scope: t.scope })),
+        };
+
+        const summary = await geminiService.generateBoardSummary(emissionData);
+        res.json({ success: true, data: summary });
+    } catch (error) {
+        console.error('Board summary error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
 
 function _calcNextRun(frequency) {
     const now = new Date();

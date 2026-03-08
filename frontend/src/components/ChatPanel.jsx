@@ -32,6 +32,7 @@ export default function ChatPanel({ isOpen, onClose }) {
                 role: 'assistant',
                 text: json.data.answer,
                 source: json.data.source,
+                sql: json.data.sql || null,
             }]);
         } catch (err) {
             setMessages(prev => [...prev, {
@@ -80,6 +81,14 @@ export default function ChatPanel({ isOpen, onClose }) {
                     <div key={i} className={`chat-message ${msg.role}`}>
                         <div className={`chat-bubble ${msg.role} ${msg.error ? 'error' : ''}`}>
                             {msg.text}
+                            {msg.sql && (
+                                <details style={{ marginTop: '8px', fontSize: '0.7rem' }}>
+                                    <summary style={{ cursor: 'pointer', color: 'var(--accent-indigo)', fontWeight: 600 }}>SQL Query</summary>
+                                    <pre style={{ margin: '6px 0 0', padding: '8px', borderRadius: '6px', background: 'rgba(0,0,0,0.15)', whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: '0.65rem', lineHeight: 1.4 }}>
+                                        {msg.sql}
+                                    </pre>
+                                </details>
+                            )}
                             {msg.source === 'gemini' && (
                                 <span className="chat-source">Gemini AI</span>
                             )}

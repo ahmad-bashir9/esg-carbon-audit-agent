@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useToast } from '../context/ToastContext';
+import { api } from '../utils/api';
 
 export default function Reports() {
     const toast = useToast();
@@ -8,6 +9,8 @@ export default function Reports() {
     const [framework, setFramework] = useState('CSRD & SEC');
     const [generating, setGenerating] = useState(false);
     const [generated, setGenerated] = useState(false);
+    const [scanning, setScanning] = useState(false);
+    const [scanResult, setScanResult] = useState(null);
 
     const handleGenerate = async () => {
         setGenerating(true);
@@ -40,6 +43,32 @@ export default function Reports() {
         }
     };
 
+    const handleScan = async () => {
+        setScanning(true);
+        setScanResult(null);
+        try {
+            const json = await api.post('/greenwash-scan', { companyName: company, period, framework });
+            setScanResult(json.data);
+        } catch (err) {
+            toast.error(err.message);
+        } finally {
+            setScanning(false);
+        }
+    };
+
+    const riskColors = {
+        low: 'var(--accent-emerald)',
+        medium: 'var(--accent-amber)',
+        high: 'var(--accent-rose)',
+        critical: 'var(--accent-rose)',
+    };
+
+    const severityBg = {
+        low: 'rgba(16, 185, 129, 0.1)',
+        medium: 'rgba(245, 158, 11, 0.1)',
+        high: 'rgba(239, 68, 68, 0.1)',
+    };
+
     return (
         <>
             <div className="page-header">
@@ -70,12 +99,19 @@ export default function Reports() {
                             <option value="GHG Protocol">Greenhouse Gas Protocol Standard</option>
                         </select>
                     </div>
-                    <div className="form-group" style={{ justifyContent: 'flex-end' }}>
+                    <div className="form-group" style={{ justifyContent: 'flex-end', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <button className="btn btn-secondary" onClick={handleScan} disabled={scanning} style={{ height: '42px' }}>
+                            {scanning ? (
+                                <><span className="loading-spinner" style={{ width: 16, height: 16, borderWidth: 2 }}></span> Scanning...</>
+                            ) : (
+                                'Greenwash Scan'
+                            )}
+                        </button>
                         <button className="btn btn-primary" onClick={handleGenerate} disabled={generating} style={{ height: '42px' }}>
                             {generating ? (
                                 <><span className="loading-spinner" style={{ width: 16, height: 16, borderWidth: 2 }}></span> Generating Report...</>
                             ) : (
-                                <>📥 Generate & Download PDF</>
+                                <>Generate & Download PDF</>
                             )}
                         </button>
                     </div>
@@ -95,6 +131,55 @@ export default function Reports() {
                             </div>
                         </div>
                     </div>
+                </div>
+            )}
+
+            {/* Greenwashing Scan Results */}
+            {scanResult && (
+                <div className="card animate-in" style={{ marginBottom: '28px', borderLeft: `4px solid ${riskColors[scanResult.risk_level]}` }}>
+                    <div className="card-header">
+                        <span className="card-title">Greenwashing Risk Assessment</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '0.75rem', padding: '3px 10px', borderRadius: '12px', background: riskColors[scanResult.risk_level], color: '#fff', fontWeight: 600, textTransform: 'uppercase' }}>
+                                {scanResult.risk_level} risk
+                            </span>
+                            <span style={{ fontWeight: 700, fontSize: '1.1rem' }}>{scanResult.risk_score}/100</span>
+                        </div>
+                    </div>
+
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: 1.6, marginBottom: '16px' }}>
+                        {scanResult.summary}
+                    </p>
+
+                    {scanResult.findings && scanResult.findings.length > 0 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
+                            {scanResult.findings.map((f, i) => (
+                                <div key={i} style={{ padding: '12px', borderRadius: '8px', background: severityBg[f.severity] || 'var(--bg-tertiary)' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                                        <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: riskColors[f.severity] || 'var(--text-muted)', color: '#fff', fontWeight: 600, textTransform: 'uppercase' }}>
+                                            {f.severity}
+                                        </span>
+                                        <span style={{ fontWeight: 600, fontSize: '0.82rem', color: 'var(--text-primary)' }}>{f.category}</span>
+                                    </div>
+                                    <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '4px 0' }}>{f.finding}</p>
+                                    <p style={{ fontSize: '0.75rem', color: 'var(--accent-sky)', margin: 0 }}>Recommendation: {f.recommendation}</p>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {scanResult.missing_scope3_categories && scanResult.missing_scope3_categories.length > 0 && (
+                        <div style={{ padding: '10px 12px', borderRadius: '8px', background: 'var(--bg-tertiary)', fontSize: '0.8rem' }}>
+                            <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Missing Scope 3 Categories: </span>
+                            <span style={{ color: 'var(--text-secondary)' }}>{scanResult.missing_scope3_categories.join(', ')}</span>
+                        </div>
+                    )}
+
+                    {scanResult.source === 'gemini' && (
+                        <span style={{ display: 'inline-block', marginTop: '10px', fontSize: '0.65rem', padding: '2px 8px', borderRadius: '4px', background: 'rgba(99, 102, 241, 0.1)', color: 'var(--accent-indigo)' }}>
+                            AI Powered
+                        </span>
+                    )}
                 </div>
             )}
 

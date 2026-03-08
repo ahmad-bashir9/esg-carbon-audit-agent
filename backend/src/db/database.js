@@ -839,6 +839,57 @@ class DB {
     return this.getAll('SELECT id, name, email, role, created_at FROM users');
   }
 
+  // ─── Carbon Budgets ─────────────────────────────────────────────
+  async ensureBudgetTable() {
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS carbon_budgets (
+        id SERIAL PRIMARY KEY,
+        year INTEGER NOT NULL UNIQUE,
+        annual_budget DOUBLE PRECISION NOT NULL,
+        notes TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+  }
+
+  async getBudgets() {
+    await this.ensureBudgetTable();
+    return this.getAll('SELECT * FROM carbon_budgets ORDER BY year DESC');
+  }
+
+  async getBudget(year) {
+    await this.ensureBudgetTable();
+    return this.getOne('SELECT * FROM carbon_budgets WHERE year = $1', [year]);
+  }
+
+  async upsertBudget(data) {
+    await this.ensureBudgetTable();
+    return this.pool.query(`
+      INSERT INTO carbon_budgets (year, annual_budget, notes)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (year) DO UPDATE SET annual_budget = $2, notes = $3, updated_at = NOW()
+    `, [data.year, data.annual_budget, data.notes || null]);
+  }
+
+  async deleteBudget(year) {
+    await this.ensureBudgetTable();
+    return this.pool.query('DELETE FROM carbon_budgets WHERE year = $1', [year]);
+  }
+
+  async getMonthlyEmissions(year) {
+    return this.getAll(`
+      SELECT
+        SUBSTRING(date, 1, 7) as month,
+        SUM(quantity) as total_quantity,
+        COUNT(*) as record_count
+      FROM activity_data
+      WHERE date >= $1 AND date < $2
+      GROUP BY SUBSTRING(date, 1, 7)
+      ORDER BY month
+    `, [`${year}-01-01`, `${year + 1}-01-01`]);
+  }
+
   async close() {
     if (this.pool) await this.pool.end();
   }

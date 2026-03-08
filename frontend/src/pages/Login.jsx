@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../utils/api';
 
 const PARTICLE_COUNT = 40;
@@ -64,8 +65,8 @@ function BackgroundCanvas() {
     return <canvas ref={canvasRef} className="login-canvas" />;
 }
 
-export default function Login({ onLogin }) {
-    const [isRegister, setIsRegister] = useState(false);
+export default function Login({ onLogin, defaultRegister = false }) {
+    const [isRegister, setIsRegister] = useState(defaultRegister);
     const [form, setForm] = useState({ name: '', email: '', password: '' });
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
@@ -238,6 +239,10 @@ export default function Login({ onLogin }) {
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
                             Continue as Guest
                         </button>
+
+                        <Link to="/" style={{ display: 'block', textAlign: 'center', marginTop: '16px', color: '#64748B', fontSize: '0.8rem', textDecoration: 'none' }}>
+                            &larr; Back to Home
+                        </Link>
                     </div>
                 </div>
             </div>
